@@ -5,7 +5,9 @@
  * Each edit is either a file-edit tool call (Edit, MultiEdit, Write), whose new text is exact, or a
  * shell command that looks like it writes files, whose new text is somewhere inside the command.
  * Every edit carries the user's latest request and the agent's closest preceding explanation, which
- * is what the review note shows. Records outside the repository are ignored, so the encoding of the
+ * is what the review note shows. The closest explanation wins whether it is visible text or
+ * thinking: transcripts sometimes keep only thinking before an edit, and an older visible message
+ * usually describes an earlier step. Records outside the repository are ignored, so the encoding of the
  * project directory name never decides which sessions count.
  */
 
@@ -24,6 +26,8 @@ export interface AgentEdit {
   text: string;
   request?: string;
   reasoning?: string;
+  /** Whether `reasoning` was said to the user or came from the agent's thinking. */
+  reasoningSource?: "text" | "thinking";
 }
 
 // Shell commands that commonly write files: heredocs, in-place editors, tee, inline scripts, and
@@ -93,9 +97,8 @@ function requestText(record: any): string | undefined {
 export function parseTranscript(contents: string, sessionId: string, repoRoot: string) {
   const edits: AgentEdit[] = [];
   let request: string | undefined;
-  // The closest explanation since the latest request; visible text wins over thinking.
-  let text: string | undefined;
-  let thinking: string | undefined;
+  // The closest explanation since the latest request, whichever kind of block it came from.
+  let explanation: { text: string; source: "text" | "thinking" } | undefined;
 
   for (const line of contents.split("\n")) {
     if (!line.trim()) continue;
@@ -110,8 +113,7 @@ export function parseTranscript(contents: string, sessionId: string, repoRoot: s
       const typed = requestText(record);
       if (typed !== undefined) {
         request = typed;
-        text = undefined;
-        thinking = undefined;
+        explanation = undefined;
       }
       continue;
     }
@@ -122,11 +124,19 @@ export function parseTranscript(contents: string, sessionId: string, repoRoot: s
     const timestamp = Date.parse(record.timestamp) || 0;
 
     for (const block of content) {
-      if (block?.type === "text" && block.text?.trim()) text = block.text.trim();
-      if (block?.type === "thinking" && block.thinking?.trim()) thinking = block.thinking.trim();
+      if (block?.type === "text" && block.text?.trim()) explanation = { text: block.text.trim(), source: "text" };
+      if (block?.type === "thinking" && block.thinking?.trim()) {
+        explanation = { text: block.thinking.trim(), source: "thinking" };
+      }
       if (block?.type !== "tool_use") continue;
 
-      const context = { sessionId, timestamp, request, reasoning: text ?? thinking };
+      const context = {
+        sessionId,
+        timestamp,
+        request,
+        reasoning: explanation?.text,
+        reasoningSource: explanation?.source,
+      };
       const input = block.input ?? {};
       const file =
         typeof input.file_path === "string" && isInside(repoRoot, path.resolve(record.cwd, input.file_path))

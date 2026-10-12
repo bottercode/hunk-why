@@ -56,7 +56,13 @@ function toAnnotation(attribution: HunkAttribution): AgentAnnotation {
   const lines: string[] = [];
 
   if (primary.request) lines.push(`You asked: "${truncate(primary.request, REQUEST_LIMIT)}"`);
-  if (primary.reasoning) lines.push(`Agent: ${truncate(primary.reasoning, REASONING_LIMIT)}`);
+  // The headline already shows a short explanation in full; repeat it only when it was cut off.
+  const summary = headline(primary.reasoning, primary.request);
+  if (primary.reasoning && summary !== truncate(primary.reasoning, REASONING_LIMIT)) {
+    lines.push(`Agent: ${truncate(primary.reasoning, REASONING_LIMIT)}`);
+  }
+  // Thinking is the agent's internal reasoning, not something it told the user, so say so.
+  if (primary.reasoningSource === "thinking") lines.push("From the agent's thinking, not its reply.");
 
   const how = primary.kind === "tool" ? "a file-edit tool call" : "a shell command";
   const extra = edits.length > 1 ? ` and ${edits.length - 1} later edit(s)` : "";
@@ -67,7 +73,7 @@ function toAnnotation(attribution: HunkAttribution): AgentAnnotation {
 
   return {
     newRange: [hunk.newStart, hunk.newStart + hunk.added.length - 1],
-    summary: headline(primary.reasoning, primary.request),
+    summary,
     rationale: lines.join("\n\n"),
     confidence: confidence(attribution),
     author: "claude-code",

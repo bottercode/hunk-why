@@ -57,6 +57,25 @@ describe("buildAgentContext", () => {
     expect(grade({ kind: "tool" }, 0.65)).toBe("low");
   });
 
+  test("repeats the explanation in the body only when the headline cut it short", () => {
+    const note = (reasoning: string) =>
+      buildAgentContext([createTestAttribution([{ reasoning }])], 1).files[0]!.annotations[0]!;
+
+    expect(note("Short reason.").rationale).not.toContain("Agent:");
+    const long = `${"Long reason that keeps going. ".repeat(10)}End.`;
+    expect(note(long).summary.endsWith("…")).toBe(true);
+    expect(note(long).rationale).toContain(`Agent: ${long.trim()}`.slice(0, 60));
+  });
+
+  test("labels explanations that came from the agent's thinking", () => {
+    const rationale = (reasoningSource: "text" | "thinking") =>
+      buildAgentContext([createTestAttribution([{ reasoning: "why", reasoningSource }])], 1).files[0]!
+        .annotations[0]!.rationale;
+
+    expect(rationale("thinking")).toContain("From the agent's thinking, not its reply.");
+    expect(rationale("text")).not.toContain("thinking");
+  });
+
   test("falls back to the request when the agent gave no explanation", () => {
     const context = buildAgentContext([createTestAttribution([{ request: "Add a retry" }])], 1);
 

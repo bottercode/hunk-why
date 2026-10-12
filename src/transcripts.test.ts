@@ -40,6 +40,7 @@ describe("parseTranscript", () => {
         text: "retry()",
         request: "Add a retry",
         reasoning: "Timeouts are transient, so retry.",
+        reasoningSource: "text",
       },
     ]);
   });
@@ -59,7 +60,7 @@ describe("parseTranscript", () => {
     expect(second).toMatchObject({ request: "second", reasoning: undefined });
   });
 
-  test("prefers visible text over thinking and falls back to thinking", () => {
+  test("uses the explanation closest to each edit, whether visible text or thinking", () => {
     const transcript = createTestTranscript([
       testRequest("go"),
       testAssistant([{ type: "thinking", thinking: "private plan" }, testEdit(`${REPO}/a.ts`, "one()")]),
@@ -67,8 +68,31 @@ describe("parseTranscript", () => {
     ]);
     const [first, second] = parseTranscript(transcript, "s1", REPO);
 
-    expect(first!.reasoning).toBe("private plan");
-    expect(second!.reasoning).toBe("Visible plan.");
+    expect(first).toMatchObject({ reasoning: "private plan", reasoningSource: "thinking" });
+    expect(second).toMatchObject({ reasoning: "Visible plan.", reasoningSource: "text" });
+  });
+
+  test("prefers fresh thinking over an older reply when the transcript kept no text before the edit", () => {
+    // Mirrors a real session: the reply before a Read, then only thinking before the Edit, with
+    // attachment and file-history records interleaved.
+    const transcript = createTestTranscript([
+      testRequest("lets say i want to test here only"),
+      { type: "attachment", cwd: REPO, timestamp: TIME },
+      { type: "file-history-snapshot" },
+      testAssistant([{ type: "thinking", thinking: "Plan the whole test." }]),
+      testAssistant([{ type: "text", text: "Yes, this session works too." }]),
+      testAssistant([{ type: "tool_use", name: "Read", input: { file_path: `${REPO}/a.ts` } }]),
+      { type: "user", cwd: REPO, timestamp: TIME, message: { content: [{ type: "tool_result", content: "file" }] } },
+      { type: "attachment", cwd: REPO, timestamp: TIME },
+      testAssistant([{ type: "thinking", thinking: "Add a path helper to a.ts." }]),
+      testAssistant([testEdit(`${REPO}/a.ts`, "helper()")]),
+    ]);
+
+    expect(parseTranscript(transcript, "s1", REPO)[0]).toMatchObject({
+      request: "lets say i want to test here only",
+      reasoning: "Add a path helper to a.ts.",
+      reasoningSource: "thinking",
+    });
   });
 
   test("ignores meta records and tagged command output as requests", () => {
