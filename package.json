@@ -1,0 +1,23 @@
+{
+  "name": "hunk-why",
+  "version": "0.1.0",
+  "description": "See why your coding agent made each change: Hunk notes built from your Claude Code transcripts",
+  "type": "module",
+  "license": "MIT",
+  "author": "bottercode",
+  "repository": "github:bottercode/hunk-why",
+  "keywords": ["hunk-extension", "hunk", "claude-code", "code-review"],
+  "hunk": {
+    "extensions": ["./src/index.ts"],
+    "apiVersion": 10
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "hunkdiff": "0.23.0",
+    "typescript": "^7.0.2"
+  }
+}
